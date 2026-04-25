@@ -1,80 +1,66 @@
 # b64decode
 
-A command-line **Base64 file decoder** built with **C++ Builder 6**, implementing the decoding algorithm from scratch using bit manipulation and stream I/O.
+A standalone Base64 file decoder written in modern C++17. The decoder is implemented from scratch — no third-party crypto or encoding libraries — using a 256-entry lookup table and bit-level reassembly to convert a Base64 stream into raw bytes.
 
-![C++](https://img.shields.io/badge/C%2B%2B-Builder%206-blue)
-![Windows](https://img.shields.io/badge/Platform-Windows-0078D6)
-![Base64](https://img.shields.io/badge/Encoding-Base64-orange)
+## Why this project
 
-## Features
+The decoder demonstrates several portfolio-relevant practices in a small, self-contained codebase:
 
-- **Full Base64 decoding** from RFC 2045 alphabet (A-Z, a-z, 0-9, +, /)
-- **Bit-level reassembly** -- extracts 6-bit values from 4 input characters and reconstructs 3 output bytes using bitwise shift and OR operations
-- **File-to-file processing** -- reads encoded input from one file, writes decoded binary to another
-- **Whitespace-tolerant** -- skips non-Base64 characters (newlines, spaces) during decoding
-- **Stream-based I/O** -- uses `std::fstream` for sequential character-by-character reading
-- **Lookup table decoding** -- maps each Base64 character to its 6-bit value via the standard alphabet array
-- **Error handling** -- validates argument count and file open status with descriptive error messages
+- **Library-first design.** All Base64 logic lives behind a public `b64::` namespace API in `include/base64_decoder.hpp`; the CLI in `src/main.cpp` is a thin shell over `b64::decode_stream`.
+- **Constant-time character lookup.** A `constexpr` 256-byte alphabet table replaces the linear scan used in the original implementation.
+- **Padding-aware streaming.** The decoder consumes arbitrary-sized Base64 streams, tolerates whitespace, honours `=` padding, and reports malformed (truncated) input instead of writing past the valid output length — a real bug that existed in the legacy version.
+- **Unit-tested.** GoogleTest is fetched at configure time via CMake `FetchContent`. The suite covers the full alphabet, single/double padding, whitespace, truncation rejection, and a full 0–255 byte round-trip.
+- **Documented.** Every public symbol carries a Doxygen block; the included `Doxyfile` produces HTML reference docs in one command.
 
-## How It Works
+## Build and run
 
-The decoder processes input in groups of 4 Base64 characters at a time:
-
-1. Each character is mapped to its 6-bit index in the Base64 alphabet
-2. The four 6-bit values (24 bits total) are reassembled into 3 output bytes:
-   - Byte 1: `(val[0] << 2) | (val[1] >> 4)`
-   - Byte 2: `(val[1] << 4) | (val[2] >> 2)`
-   - Byte 3: `(val[2] << 6) | val[3]`
-3. Output bytes are written to the destination file
-
-## Dependencies
-
-| Component | Purpose |
-|-----------|---------|
-| C++ Builder 6 | IDE and compiler |
-| VCL / RTL | Standard runtime libraries |
-
-## Building
-
-### With C++ Builder 6
-
-1. Open `b64decode.bpr` in the C++ Builder IDE.
-2. Press **F9** to build and run.
-
-### With any C++ compiler
-
-The source code is standard C++ and can be compiled independently:
+Requires CMake ≥ 3.14 and a C++17 compiler.
 
 ```bash
-g++ -o b64decode main.cpp
+cmake -S . -B build
+cmake --build build -j
+./build/b64decode data/test.base64 decoded.bin
 ```
 
-## Usage
+## Test
 
 ```bash
-b64decode <input_file> <output_file>
+ctest --test-dir build --output-on-failure
 ```
 
-**Example:**
+## Generate API docs
 
 ```bash
-b64decode test.base64 output.bin
+doxygen docs/Doxyfile
+# Open docs/build/html/index.html
 ```
 
-The program expects exactly 2 arguments. It will report an error if files cannot be opened.
-
-## Project Structure
+## Project layout
 
 ```
 b64decode/
-├── main.cpp          # Base64 decoder implementation
-├── b64decode.bpr     # C++ Builder 6 project file
-├── b64decode.bpf     # Project form file
-├── b64decode.res     # Compiled resource file
-├── test.base64       # Sample Base64 encoded input
-└── wyj.txt           # Sample decoded output
+├── CMakeLists.txt                      # Build, FetchContent for GoogleTest
+├── include/
+│   └── base64_decoder.hpp              # Public namespace API + Doxygen
+├── src/
+│   ├── base64_decoder.cpp              # Lookup table, block decode, stream decode
+│   └── main.cpp                        # CLI: argv parsing, file I/O, exit codes
+├── tests/
+│   └── test_base64_decoder.cpp         # GoogleTest cases
+├── docs/
+│   └── Doxyfile                        # Doxygen configuration
+└── data/
+    └── test.base64                     # Sample encoded fixture
 ```
 
-## License
+## CLI
 
-This project is provided as-is for educational purposes.
+```
+b64decode <input_file> <output_file>
+```
+
+Exit codes: `0` success, `1` usage error, `2` filesystem error, `3` malformed input.
+
+## Origins
+
+This project began as a homework assignment built in C++ Builder 6 for Windows. It was rewritten on the `refactor/clean-architecture` branch into a portable, tested, documented portfolio piece. The original Borland project files and Polish-language identifiers have been removed; the decoding algorithm is otherwise unchanged.
